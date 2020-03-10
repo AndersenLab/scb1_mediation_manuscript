@@ -497,7 +497,7 @@ ggsave("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscrip
 ###############################
 
 # load data
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS11_scb1_pruned.Rda")
+load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS12_scb1_pruned.Rda")
 load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS4_nil_genotypes.Rda")
 load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS6_HTA_stats.Rda")
 
@@ -526,8 +526,8 @@ stats <- HTA_stats %>%
                                          TRUE ~ "ns"))
 
 # regress scb-1
-scb1_regressed <- easysorter::regress(scb1_pruned %>%
-                                          dplyr::filter(strain %in% c("N2", "CB4856", "ECA1132", "ECA1133")))
+scb1_regressed <- easysorter::regress(scb1_pruned) %>%
+    dplyr::filter(strain %in% c("N2", "CB4856", "ECA1134", "ECA1132"))
 
 # plot
 pheno <- scb1_regressed %>%
@@ -546,7 +546,7 @@ pheno <- scb1_regressed %>%
                                             TRUE ~ "NIL")) %>%
     dplyr::full_join(stats, by = c("strain", "condition", "trait")) %>%
     dplyr::mutate(strain = factor(strain, 
-                                  levels = rev(c("N2", "ECA1132", "ECA1133", "CB4856")))) %>%
+                                  levels = rev(c("N2", "ECA1132", "ECA1134", "CB4856")))) %>%
     # labels = c("N2", "CB4856", "ECA232\nN2[V,CB>N2]", "ECA1114\nCB[V,N2>CB]", "ECA1132\nN2[scb-1∆]", "ECA1135\nN2[scb-1∆]", "ECA1133\nCB[scb-1∆]", "ECA1134\nCB[scb-1∆]"))) %>%
     dplyr::group_by(strain, condition) %>%
     dplyr::filter(!is.na(strain)) %>%
@@ -583,20 +583,20 @@ eca1132 <- nil_genotypes %>%
     dplyr::mutate(sample = "ECA1132")
 
 # fake ECA1133 geno
-eca1133 <- nil_genotypes %>%
+eca1134 <- nil_genotypes %>%
     dplyr::filter(sample == "CB4856") %>%
-    dplyr::mutate(sample = "ECA1133")
+    dplyr::mutate(sample = "ECA1134")
 
 # add to nil genotypes
 nil_genotypes <- nil_genotypes %>%
-    dplyr::bind_rows(eca1132, eca1133)
+    dplyr::bind_rows(eca1134, eca1132)
 
 # plot chrV genotype
 chrVgeno <- nil_genotypes %>%
     dplyr::filter(chrom == "V",
-                  sample %in% c("N2", "CB4856", "ECA1132", "ECA1133")) %>%
+                  sample %in% c("N2", "CB4856", "ECA1132", "ECA1134")) %>%
     dplyr::mutate(chrom = "chrV",
-                  sample = factor(sample, levels = rev(c("N2", "ECA1132", "ECA1133", "CB4856")))) %>%
+                  sample = factor(sample, levels = rev(c("N2", "ECA1132", "ECA1134", "CB4856")))) %>%
     dplyr::distinct() %>%
     ggplot(.)+
     geom_segment(aes(x = start/1e6, y = sample, xend = end/1e6, yend = sample, color = gt_name, size = 2), alpha = 0.7)+
@@ -617,7 +617,7 @@ chrVgeno <- nil_genotypes %>%
     labs(x = "Position (Mb)", y = "") +
     geom_vline(xintercept = 11.11, linetype = "dashed") +
     geom_point(data = nil_genotypes %>%
-                   dplyr::filter(sample %in% c("ECA1132", "ECA1133"), chrom == "V") %>%
+                   dplyr::filter(sample %in% c("ECA1134", "ECA1132"), chrom == "V") %>%
                    dplyr::mutate(chrom = "chrV"),
                aes(x = 11.11, y = sample), shape = 24, color = "black", fill = "grey", size = 3)
 
@@ -625,8 +625,48 @@ cowplot::plot_grid(chrVgeno, pheno, nrow = 1, ncol = 2, rel_widths = c(1, 4.5), 
 
 # save plot
 ggsave("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/figures/figure5_scb1delplot.png", width = 7.5, height = 2)
-# ggsave("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/figures/figure5_scb1delplot_bar.png", width = 7.5, height = 2)
 
 
-
-
+# # only plot pheno
+# scb1_regressed %>%
+#     dplyr::filter(trait == trt) %>%
+#     dplyr::group_by(condition) %>%
+#     dplyr::mutate(relative_pheno = ((phenotype - min(phenotype, na.rm = T)) / (max(phenotype, na.rm = T) - min(phenotype, na.rm = T)))) %>%
+#     dplyr::mutate(phenotype = relative_pheno) %>%
+#     dplyr::mutate(strain_fill = dplyr::case_when(strain %in% c("N2", "ECA1132", "ECA1135") ~ "N2",
+#                                                  strain %in% c("CB4856", "ECA1133", "ECA1134") ~ "CB",
+#                                                  TRUE ~ "NIL"),
+#                   groups = dplyr::case_when(strain %in% c("N2", "ECA1132", "ECA1135", "ECA232") ~ "N2",
+#                                             strain %in% c("CB4856", "ECA1133", "ECA1134", "ECA1114") ~ "CB",
+#                                             TRUE ~ "NIL")) %>%
+#     dplyr::full_join(stats, by = c("strain", "condition", "trait")) %>%
+#     dplyr::mutate(strain = factor(strain, 
+#                                   levels = c("N2", "CB4856", "ECA232", "ECA1114", "ECA1132", "ECA1135", "ECA1133", "ECA1134"))) %>%
+#     # levels = rev(c("N2", "ECA1132", "ECA1133", "CB4856")))) %>%
+#     # labels = c("N2", "CB4856", "ECA232\nN2[V,CB>N2]", "ECA1114\nCB[V,N2>CB]", "ECA1132\nN2[scb-1∆]", "ECA1135\nN2[scb-1∆]", "ECA1133\nCB[scb-1∆]", "ECA1134\nCB[scb-1∆]"))) %>%
+#     dplyr::group_by(strain, condition) %>%
+#     dplyr::filter(!is.na(strain)) %>%
+#     dplyr::mutate(phen = max(phenotype) + 0.2) %>%
+#     ggplot(.) +
+#     aes(x = strain, y = phenotype, fill = strain_fill) +
+#     geom_jitter(width = 0.1, size = 0.05) +
+#     geom_boxplot(outlier.color = NA, alpha = 0.5, size = 0.2) +
+#     ggplot2::geom_text(aes(label = sig, y = phen, color = groups), size = tsize/4) +
+#     scale_fill_manual(values = c("N2" = "orange", "CB" = "blue", "NIL" = "grey")) +
+#     scale_x_discrete(labels = c("N2" = "N2", "CB4856" = "CB4856", "ECA232" = "ECA232\nN2[V,CB>N2]", "ECA1114" = "ECA1114\nCB[V,N2>CB]", 
+#                                 "ECA1132" = expression("ECA1132\nN2[scb-1"*Delta*"]"), "ECA1135" = expression(paste("ECA1135\nN2[scb-1", Delta, "]")), 
+#                                 "ECA1133" = expression(paste("ECA1133\nCB[scb-1", Delta, "]")), "ECA1134" = expression(paste("ECA1134\nCB[scb-1", Delta, "]")))) +
+#     scale_color_manual(values = c("N2" = "orange", "CB" = "blue")) +
+#     theme_bw(tsize) +
+#     theme(axis.text.x = element_text(face="bold", color="black", angle = 45, hjust = 1),
+#           axis.title.x = element_text(face="bold", color="black"),
+#           axis.title.y = element_text(face="bold", color="black"),
+#           axis.text.y = element_text(face="bold", color="black"),
+#           axis.ticks.y = element_blank(),
+#           strip.text = element_text(face = "bold", color = "black"),
+#           legend.position = "none",
+#           panel.grid.minor = element_blank(),
+#           panel.grid.major = element_blank()) +
+#     labs(x = " ", y = "Relative residual animal length") +
+#     facet_wrap(.~condition, nrow = 4)
+# ggsave("~/Desktop/test.png")
