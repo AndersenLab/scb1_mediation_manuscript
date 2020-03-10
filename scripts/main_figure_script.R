@@ -3,7 +3,12 @@
 library(tidyverse)
 library(linkagemapping)
 library(viridis)
-library(ggrepel)
+
+###############################
+# IMPORTANT!!!!!
+# Set working directory
+setwd("~/Dropbox/AndersenLab/LabFolders/Katie/projects/scb1_mediation_manuscript/")
+###############################
 
 ###############################
 # Figure 1
@@ -11,7 +16,7 @@ library(ggrepel)
 ###############################
 
 # load data
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS3_mappingdf.Rda")
+load("data/FileS3_mappingdf.Rda")
 
 # add condtrt
 mappingdf <- mappingdf %>%
@@ -85,7 +90,7 @@ plot_lods(mappingdf %>%
     ggplot2::geom_vline(data = data.frame(chr = "V", condtrt = gsub("_", "\n", chrVtraits)), aes(xintercept = 11.11), linetype = "dashed", color = "navy", size = 0.5)
 
 # save figure
-ggsave("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/figures/figure1_linkageplots.pdf", height = 9, width = 7.5)
+ggsave("figures/figure1_linkageplots.png", height = 9, width = 7.5)
 
 
 ###############################
@@ -94,9 +99,9 @@ ggsave("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscrip
 ###############################
 
 # load data
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS4_nil_genotypes.Rda")
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS5_nildose.Rda")
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS6_HTA_stats.Rda")
+load("data/FileS4_nil_genotypes.Rda")
+load("data/FileS5_nildose.Rda")
+load("data/FileS6_HTA_stats.Rda")
 
 # plot all drugs for median.EXT
 trt <- "median.EXT"
@@ -143,7 +148,6 @@ pheno <-  nil_regressed %>%
     dplyr::full_join(stats, by = c("strain", "condition", "trait")) %>%
     dplyr::mutate(strain = factor(strain, 
                                   levels = rev(c("N2", "ECA232", "ECA1132", "ECA1135", "ECA1114", "ECA1133", "ECA1134", "CB4856")))) %>%
-    # labels = c("N2", "CB4856", "ECA232\nN2[V,CB>N2]", "ECA1114\nCB[V,N2>CB]", "ECA1132\nN2[scb-1∆]", "ECA1135\nN2[scb-1∆]", "ECA1133\nCB[scb-1∆]", "ECA1134\nCB[scb-1∆]"))) %>%
     dplyr::group_by(strain, condition) %>%
     dplyr::mutate(phen = max(phenotype) + 0.2) %>%
     ggplot(.) +
@@ -153,16 +157,13 @@ pheno <-  nil_regressed %>%
     ggplot2::geom_text(aes(label = sig, y = phen, color = groups), size = tsize/4, angle = -90) +
     scale_fill_manual(values = c("N2" = "orange", "CB" = "blue", "NIL" = "grey")) +
     scale_color_manual(values = c("N2" = "orange", "CB" = "blue")) +
-    # scale_y_discrete(limits = c(0, 0.2, 0.4, 0.6, 0.8, 1)) +
     scale_y_continuous(limits = c(0, 1.21),
                        breaks = seq(0,1, 0.5),
                        expand=expand_scale(mult=c(0.2,0.2))) +
     theme_bw(tsize) +
     theme(axis.text.x = element_text(face="bold", color="black"),
-        # axis.text.x = element_blank(),
           axis.title.x = element_text(face="bold", color="black"),
           axis.text.y = element_blank(),
-          # axis.title.y = element_blank(),
           axis.ticks.y = element_blank(),
           strip.text = element_text(face = "bold", color = "black"),
           legend.position = "none",
@@ -200,7 +201,7 @@ chrVgeno <- nil_genotypes %>%
 cowplot::plot_grid(chrVgeno, pheno, nrow = 1, ncol = 2, rel_widths = c(1, 4.5), align = "h", axis = "b", labels = c("A", "B"))
 
 # save plot
-ggsave("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/figures/figure2_nilplots.pdf", width = 7.5, height = 2)
+ggsave("figures/figure2_nilplots.png", width = 7.5, height = 2)
 
 
 
@@ -210,13 +211,14 @@ ggsave("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscrip
 ###############################
 
 # get gene locations
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS8_eqtlmap.Rda")
+load("data/FileS8_eqtlmap.Rda")
 
 # chr lengths
-df_chr_length <- data.table::fread("~/Downloads/chr_info.tsv") %>%
-    dplyr::filter(V1 != "MtDNA") %>%
-    dplyr::rename(chr = V1, stop= V2) %>%
-    dplyr::mutate(start=0)
+df_chr_length <- data.frame(
+    chr = c("I", 'II', "III", "IV", "V", "X"),
+    stop = c(15072434, 15279421, 13783801, 17493829, 20924180, 17718942), 
+    start = 0
+)
 
 eqtlmap <- eqtlmap %>%
     dplyr::filter(!is.na(probe_chr))
@@ -272,7 +274,8 @@ diffchr_trans <- eqtlmap %>%
 alltrans <- rbind(diffchr_trans, samechr_trans)
 
 # only use trans eQTL for identifying hotspots
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/data/raw/N2xCB4856cross_full2.Rda")
+# load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/data/raw/N2xCB4856cross_full2.Rda")
+linkagemapping::load_cross_obj("N2xCB4856cross_full")
 
 # riail marker conversion
 mappos <- qtl::pull.map(N2xCB4856cross_full2, as.table = TRUE) %>%
@@ -412,7 +415,6 @@ cm5 <- summary[[3]] %>%
     ggplot2::theme_bw(tsize) +
     ggplot2::geom_line()+
     ggplot2::geom_text(data = hs, label = "*", fontface = "bold", size = 5) +
-    # ggplot2::scale_color_manual(values = c("TRUE" = "blue", "FALSE" = 'black')) +
     ggplot2::geom_hline(yintercept = qpois(summary[[2]]$pval, summary[[2]]$lambda), color = "red") +
     ggplot2::facet_grid(.~chr, scales = "free", space = "free") +
     ggplot2::labs(x = "QTL position (Mb)", y = "Number of QTL") +
@@ -428,7 +430,7 @@ cm5 <- summary[[3]] %>%
 cowplot::plot_grid(eqtlplot, cm5, nrow = 2, align = "v", axis = "lr", labels = c("A", "B"), rel_heights = c(1, 0.3))
 
 # save
-ggsave("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/figures/figure3_eqtlplot.pdf", height = 8, width = 7.5)
+ggsave("figures/figure3_eqtlplot.png", height = 8, width = 7.5)
 
 
 ###############################
@@ -437,8 +439,8 @@ ggsave("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscrip
 ###############################
 
 # load data
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS10_scb1_mediation.Rda")
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS3_mappingdf.Rda")
+load("data/FileS11_scb1_mediation.Rda")
+load("data/FileS3_mappingdf.Rda")
 
 # add condtrt
 mappingdf <- mappingdf %>%
@@ -488,7 +490,7 @@ scb1_mediation %>%
     geom_vline(data = chrVtraits, aes(xintercept = ci_l_pos/1e6), color = "blue", linetype = "dashed") +
     geom_vline(data = chrVtraits, aes(xintercept = ci_r_pos/1e6), color = "blue", linetype = "dashed")
 
-ggsave("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/figures/figure4_mediation.pdf", height = 4, width = 7.5)
+ggsave("figures/figure4_mediation.png", height = 4, width = 7.5)
 
 
 ###############################
@@ -497,13 +499,12 @@ ggsave("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscrip
 ###############################
 
 # load data
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS12_scb1_pruned.Rda")
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS4_nil_genotypes.Rda")
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS6_HTA_stats.Rda")
+load("data/FileS12_scb1_pruned.Rda")
+load("data/FileS4_nil_genotypes.Rda")
+load("data/FileS6_HTA_stats.Rda")
 
 # plot all drugs for median.EXT
 trt <- "median.EXT"
-# trt <- "mean.EXT"
 tsize <- 10 #8
 
 # stats
@@ -558,16 +559,13 @@ pheno <- scb1_regressed %>%
     ggplot2::geom_text(aes(label = sig, y = phen, color = groups), size = tsize/4, angle = -90) +
     scale_fill_manual(values = c("N2" = "orange", "CB" = "blue", "NIL" = "grey")) +
     scale_color_manual(values = c("N2" = "orange", "CB" = "blue")) +
-    # scale_y_discrete(limits = c(0, 0.2, 0.4, 0.6, 0.8, 1)) +
     scale_y_continuous(limits = c(0, 1.21),
                        breaks = seq(0,1, 0.5),
                        expand=expand_scale(mult=c(0.2,0.2))) +
     theme_bw(tsize) +
     theme(axis.text.x = element_text(face="bold", color="black"),
-          # axis.text.x = element_blank(),
           axis.title.x = element_text(face="bold", color="black"),
           axis.text.y = element_blank(),
-          # axis.title.y = element_blank(),
           axis.ticks.y = element_blank(),
           strip.text = element_text(face = "bold", color = "black"),
           legend.position = "none",
@@ -604,7 +602,6 @@ chrVgeno <- nil_genotypes %>%
     scale_color_manual(values=c("N2"="orange","CB4856"="blue"))+
     theme_bw(tsize) +
     theme(axis.text.x = element_text(face="bold", color="black"),
-          # axis.text.y = element_text(face="bold", color="black"),
           axis.ticks.y = element_blank(),
           axis.text.y = element_blank(),
           axis.title.x = element_text(face="bold", color="black"),
@@ -624,49 +621,4 @@ chrVgeno <- nil_genotypes %>%
 cowplot::plot_grid(chrVgeno, pheno, nrow = 1, ncol = 2, rel_widths = c(1, 4.5), align = "h", axis = "b", labels = c("A", "B"))
 
 # save plot
-ggsave("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/figures/figure5_scb1delplot.png", width = 7.5, height = 2)
-
-
-# # only plot pheno
-# scb1_regressed %>%
-#     dplyr::filter(trait == trt) %>%
-#     dplyr::group_by(condition) %>%
-#     dplyr::mutate(relative_pheno = ((phenotype - min(phenotype, na.rm = T)) / (max(phenotype, na.rm = T) - min(phenotype, na.rm = T)))) %>%
-#     dplyr::mutate(phenotype = relative_pheno) %>%
-#     dplyr::mutate(strain_fill = dplyr::case_when(strain %in% c("N2", "ECA1132", "ECA1135") ~ "N2",
-#                                                  strain %in% c("CB4856", "ECA1133", "ECA1134") ~ "CB",
-#                                                  TRUE ~ "NIL"),
-#                   groups = dplyr::case_when(strain %in% c("N2", "ECA1132", "ECA1135", "ECA232") ~ "N2",
-#                                             strain %in% c("CB4856", "ECA1133", "ECA1134", "ECA1114") ~ "CB",
-#                                             TRUE ~ "NIL")) %>%
-#     dplyr::full_join(stats, by = c("strain", "condition", "trait")) %>%
-#     dplyr::mutate(strain = factor(strain, 
-#                                   levels = c("N2", "CB4856", "ECA232", "ECA1114", "ECA1132", "ECA1135", "ECA1133", "ECA1134"))) %>%
-#     # levels = rev(c("N2", "ECA1132", "ECA1133", "CB4856")))) %>%
-#     # labels = c("N2", "CB4856", "ECA232\nN2[V,CB>N2]", "ECA1114\nCB[V,N2>CB]", "ECA1132\nN2[scb-1∆]", "ECA1135\nN2[scb-1∆]", "ECA1133\nCB[scb-1∆]", "ECA1134\nCB[scb-1∆]"))) %>%
-#     dplyr::group_by(strain, condition) %>%
-#     dplyr::filter(!is.na(strain)) %>%
-#     dplyr::mutate(phen = max(phenotype) + 0.2) %>%
-#     ggplot(.) +
-#     aes(x = strain, y = phenotype, fill = strain_fill) +
-#     geom_jitter(width = 0.1, size = 0.05) +
-#     geom_boxplot(outlier.color = NA, alpha = 0.5, size = 0.2) +
-#     ggplot2::geom_text(aes(label = sig, y = phen, color = groups), size = tsize/4) +
-#     scale_fill_manual(values = c("N2" = "orange", "CB" = "blue", "NIL" = "grey")) +
-#     scale_x_discrete(labels = c("N2" = "N2", "CB4856" = "CB4856", "ECA232" = "ECA232\nN2[V,CB>N2]", "ECA1114" = "ECA1114\nCB[V,N2>CB]", 
-#                                 "ECA1132" = expression("ECA1132\nN2[scb-1"*Delta*"]"), "ECA1135" = expression(paste("ECA1135\nN2[scb-1", Delta, "]")), 
-#                                 "ECA1133" = expression(paste("ECA1133\nCB[scb-1", Delta, "]")), "ECA1134" = expression(paste("ECA1134\nCB[scb-1", Delta, "]")))) +
-#     scale_color_manual(values = c("N2" = "orange", "CB" = "blue")) +
-#     theme_bw(tsize) +
-#     theme(axis.text.x = element_text(face="bold", color="black", angle = 45, hjust = 1),
-#           axis.title.x = element_text(face="bold", color="black"),
-#           axis.title.y = element_text(face="bold", color="black"),
-#           axis.text.y = element_text(face="bold", color="black"),
-#           axis.ticks.y = element_blank(),
-#           strip.text = element_text(face = "bold", color = "black"),
-#           legend.position = "none",
-#           panel.grid.minor = element_blank(),
-#           panel.grid.major = element_blank()) +
-#     labs(x = " ", y = "Relative residual animal length") +
-#     facet_wrap(.~condition, nrow = 4)
-# ggsave("~/Desktop/test.png")
+ggsave("figures/figure5_scb1delplot.png", width = 7.5, height = 2)

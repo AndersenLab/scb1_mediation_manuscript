@@ -9,9 +9,12 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, results = 
 
 library(tidyverse)
 library(linkagemapping)
-library(png)
-library(magick)
 
+###############################
+# IMPORTANT!!!!!
+# Set working directory
+setwd("~/Dropbox/AndersenLab/LabFolders/Katie/projects/scb1_mediation_manuscript/")
+###############################
 
 ```
 
@@ -22,7 +25,7 @@ library(magick)
 ###############################
 
 # load data
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS1_dosepruned.Rda")
+load("data/FileS1_dosepruned.Rda")
 
 # adjust for differences in control with subtraction
 dosepruned_sub <- NULL
@@ -70,7 +73,6 @@ dosepruned_sub %>%
     dplyr::distinct(condition, trait, dose, strain, .keep_all = T) %>%
     ggplot2::ggplot(.) +
     ggplot2::aes(x = factor(dose), color = strain, group = interaction(strain, dose)) +
-    # ggplot2::geom_boxplot(alpha = 0.5, outlier.color = NA, size = 0.2) +
     ggplot2::geom_jitter(aes(y = avg), width = 0.1) +
     ggplot2::geom_line(aes(y = avg, group = strain)) +
     ggplot2::geom_text(aes(y = phen, label = choose), color = "red", size = 6) +
@@ -84,8 +86,6 @@ dosepruned_sub %>%
     ggplot2::scale_color_manual(values = c("N2" = "orange", "CB4856" = "blue",
                                           "DL238" = "green", "JU258" = "purple"),
                                name = "Strain")
-
-# ggsave("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/figures/supp/s1_dosev2.pdf", height = 5, width = 7.5)
 
 ```
 
@@ -104,9 +104,9 @@ cat("\n\n\\pagebreak\n")
 ###############################
 
 # load data
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS3_mappingdf.Rda")
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS2_riailpheno.Rda")
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/data/raw/N2xCB4856cross_full2.Rda")
+load("data/FileS3_mappingdf.Rda")
+load("data/FileS2_riailpheno.Rda")
+linkagemapping::load_cross_obj("N2xCB4856cross_full")
 
 # add condtrt
 mappingdf <- mappingdf %>%
@@ -260,7 +260,7 @@ c <- "amsacrine"
             cat("\n\n\n")
     }
     cat("\n\n\n")
-    cat("\n\n\\pagebreak\n") # might need fixed...
+    cat("\n\n\\pagebreak\n")
 }
 
 ```
@@ -279,7 +279,7 @@ cat("\n\n\\pagebreak\n")
 ###############################
 
 # load data
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS5_nildose.Rda")
+load("data/FileS5_nildose.Rda")
 
 # adjust for differences in control with subtraction
 nildose_sub <- NULL
@@ -345,10 +345,10 @@ cat("\n\n\\pagebreak\n")
 ```{r, fig.height = 4, fig.width = 5}
 
 parta <- cowplot::ggdraw() +
-  cowplot::draw_image("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/figures/supp/partA.png")
+  cowplot::draw_image("figures/supp/partA.png")
 
 partb <- cowplot::ggdraw() +
-  cowplot::draw_image("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/figures/supp/partB.png")
+  cowplot::draw_image("figures/supp/partB.png")
 
 cowplot::plot_grid(parta, partb, nrow = 2, labels = c("A", "B"))
 
@@ -369,7 +369,7 @@ cat("\n\n\\pagebreak\n")
 ###############################
 
 # load data
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS10_set1_mappingdf.Rda")
+load("data/FileS10_set1_mappingdf.Rda")
 
 peaks <- set1_mappingdf %>%
     na.omit()
@@ -441,20 +441,18 @@ cat("\n\n\\pagebreak\n")
 ###############################
 
 # load data
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS12_scb1_pruned.Rda")
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS4_nil_genotypes.Rda")
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS6_HTA_stats.Rda")
+load("data/FileS12_scb1_pruned.Rda")
+load("data/FileS4_nil_genotypes.Rda")
+load("data/FileS6_HTA_stats.Rda")
 
 # plot all drugs for median.EXT
 trt <- "median.EXT"
-# trt <- "mean.EXT"
 tsize <- 10 #8
 
 # stats
 stats <- HTA_stats %>%
     dplyr::filter(comparison %in% c("N2-ECA232", "N2-ECA1132", "N2-ECA1135", "ECA1114-CB4856", "ECA1133-CB4856", "ECA1134-CB4856"),
                   experiment == "CRISPR") %>%
-                  # condition %in% c("bleomycin", "amsacrine", "carmustine", "cisplatin", "etoposide"))%>%
     dplyr::select(condition, trait, comparison, pval = adj.p.value) %>%
     dplyr::mutate(strain = dplyr::case_when(comparison == "N2-ECA232" ~ "ECA232",
                                             comparison == "N2-ECA1132" ~ "ECA1132",
@@ -488,7 +486,6 @@ scb1_regressed %>%
     dplyr::mutate(strain = factor(strain, 
                                   levels = c("N2", "CB4856", "ECA232", "ECA1114", "ECA1132", "ECA1135", "ECA1133", "ECA1134"))) %>%
                                   # levels = rev(c("N2", "ECA1132", "ECA1133", "CB4856")))) %>%
-    # labels = c("N2", "CB4856", "ECA232\nN2[V,CB>N2]", "ECA1114\nCB[V,N2>CB]", "ECA1132\nN2[scb-1∆]", "ECA1135\nN2[scb-1∆]", "ECA1133\nCB[scb-1∆]", "ECA1134\nCB[scb-1∆]"))) %>%
     dplyr::group_by(strain, condition) %>%
     dplyr::filter(!is.na(strain)) %>%
     dplyr::mutate(phen = max(phenotype) + 0.2) %>%
@@ -532,36 +529,12 @@ cat("\n\n\\pagebreak\n")
 ###############################
 
 # load data
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS12_scb1_pruned.Rda")
-load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS4_nil_genotypes.Rda")
-# load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/data/FileS6_HTA_stats.Rda")
+load("data/FileS12_scb1_pruned.Rda")
+load("data/FileS4_nil_genotypes.Rda")
 
 # plot all drugs for median.EXT
 trt <- "median.EXT"
-# trt <- "mean.EXT"
 tsize <- 10 #8
-
-# # stats
-# stats <- HTA_stats %>%
-#     dplyr::filter(comparison %in% c("N2-ECA232", "N2-ECA1132", "N2-ECA1135", "ECA1114-CB4856", "ECA1133-CB4856", "ECA1134-CB4856"),
-#                   experiment == "CRISPR") %>%
-#                   # condition %in% c("bleomycin", "amsacrine", "carmustine", "cisplatin", "etoposide"))%>%
-#     dplyr::select(condition, trait, comparison, pval = adj.p.value) %>%
-#     dplyr::mutate(strain = dplyr::case_when(comparison == "N2-ECA232" ~ "ECA232",
-#                                             comparison == "N2-ECA1132" ~ "ECA1132",
-#                                             comparison == "N2-ECA1135" ~ "ECA1135",
-#                                             comparison == "ECA1114-CB4856" ~ "ECA1114",
-#                                             comparison == "ECA1133-CB4856" ~ "ECA1133",
-#                                             comparison == "ECA1134-CB4856" ~ "ECA1134",
-#                                             TRUE ~ "NA"),
-#                   sig = dplyr::case_when(pval < 0.0001 ~ "****",
-#                                          pval < 0.001 ~ "***",
-#                                          pval < 0.01 ~ "**",
-#                                          pval < 0.05 ~ "*",
-#                                          TRUE ~ "ns"))
-
-# regress scb-1
-# scb1_regressed <- easysorter::regress(scb1_pruned)
 
 # plot
 scb1_pruned %>%
@@ -576,19 +549,15 @@ scb1_pruned %>%
                   groups = dplyr::case_when(strain %in% c("N2", "ECA1132", "ECA1135", "ECA232") ~ "N2",
                                             strain %in% c("CB4856", "ECA1133", "ECA1134", "ECA1114") ~ "CB",
                                             TRUE ~ "NIL")) %>%
-    # dplyr::full_join(stats, by = c("strain", "condition", "trait")) %>%
     dplyr::mutate(strain = factor(strain, 
                                   levels = c("N2", "CB4856", "ECA232", "ECA1114", "ECA1132", "ECA1135", "ECA1133", "ECA1134"))) %>%
                                   # levels = rev(c("N2", "ECA1132", "ECA1133", "CB4856")))) %>%
-    # labels = c("N2", "CB4856", "ECA232\nN2[V,CB>N2]", "ECA1114\nCB[V,N2>CB]", "ECA1132\nN2[scb-1∆]", "ECA1135\nN2[scb-1∆]", "ECA1133\nCB[scb-1∆]", "ECA1134\nCB[scb-1∆]"))) %>%
     dplyr::group_by(strain, condition) %>%
     dplyr::filter(!is.na(strain)) %>%
-    # dplyr::mutate(phen = max(phenotype) + 0.2) %>%
     ggplot(.) +
     aes(x = strain, y = phenotype, fill = strain_fill) +
     geom_jitter(width = 0.1, size = 0.05) +
     geom_boxplot(outlier.color = NA, alpha = 0.5, size = 0.2) +
-    # ggplot2::geom_text(aes(label = sig, y = phen, color = groups), size = tsize/4) +
     scale_fill_manual(values = c("N2" = "orange", "CB" = "blue", "NIL" = "grey")) +
     scale_x_discrete(labels = c("N2" = "N2", "CB4856" = "CB4856", "ECA232" = "ECA232\nN2[V,CB>N2]", "ECA1114" = "ECA1114\nCB[V,N2>CB]", 
                                 "ECA1132" = expression("ECA1132\nN2[scb-1"*Delta*"]"), "ECA1135" = expression(paste("ECA1135\nN2[scb-1", Delta, "]")), 
