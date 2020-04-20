@@ -10,13 +10,14 @@ library(viridis)
 setwd("~/Dropbox/AndersenLab/LabFolders/Katie/projects/scb1_mediation_manuscript/")
 ###############################
 
+
 ###############################
 # Figure 1
 # Linkage mapping results
 ###############################
 
 # load data
-load("data/FileS3_mappingdf.Rda")
+mappingdf <- read.csv("data/FileS3_mappingdf.csv")
 
 # add condtrt
 mappingdf <- mappingdf %>%
@@ -26,7 +27,8 @@ mappingdf <- mappingdf %>%
 chrVtraits <- mappingdf %>%
     dplyr::filter(chr == "V", 
                   ci_l_pos < 11119730,
-                  ci_r_pos > 11118721) %>%
+                  ci_r_pos > 11118721,
+                  trait != "median.EXT") %>%
     na.omit() %>%
     dplyr::group_by(condition) %>%
     dplyr::arrange(desc(lod)) %>%
@@ -65,14 +67,10 @@ plot_lods <- function(map, tsize = 12) {
                                 size = tsize/7, show.legend = FALSE, color = "red") + 
         ggplot2::geom_text(data = cis, ggplot2::aes(x = pos/1e+06, y = (1.2 * maxlod), label = paste0(100 *round(var_exp, digits = 3), "%")),
                                size = tsize/5, colour = "black", hjust = "inward") +
-        # ggrepel::geom_text_repel(data = cis, ggplot2::aes(x = pos/1e+06, y = (1.5 * maxlod), label = paste0(100 *round(var_exp, digits = 3), "%")), 
-        #                    size = tsize/5, colour = "black") + 
         ggplot2::geom_line(size = tsize/25, alpha = 0.85) +
         ggplot2::facet_grid(condition ~ chr, scales = "free") +
         ggplot2::labs(x = "Genomic position (Mb)", y = "LOD") +
         ggplot2::scale_colour_discrete(name = "Mapping\nIteration") +
-        # ggplot2::scale_x_continuous(expand = c(0,0)) + 
-        # ggplot2::scale_y_continuous(expand = expand_scale(mult=c(0,0.1))) +
         ggplot2::theme_bw(tsize) +
         ggplot2::theme(
             axis.text = ggplot2::element_text(color = "black", face = "bold"),
@@ -99,29 +97,13 @@ ggsave("figures/figure1_linkageplots.png", height = 9, width = 7.5)
 ###############################
 
 # load data
-load("data/FileS4_nil_genotypes.Rda")
-load("data/FileS5_nildose.Rda")
-load("data/FileS6_HTA_stats.Rda")
+nil_genotypes <- read.csv("data/FileS5_nil_genotypes.csv")
+nildose <- read.csv("data/FileS6_nildose.csv")
+HTA_stats <- read.csv("data/FileS7_HTA_stats.csv")
 
 # plot all drugs for median.EXT
 trt <- "median.EXT"
 tsize <- 10 # 5
-
-# stats
-stats <- HTA_stats %>%
-    dplyr::filter(comparison %in% c("N2-ECA232", "ECA1114-CB4856"),
-                  experiment == "NIL",
-                  # condition %in% c("bleomycin", "amsacrine", "carmustine", "cisplatin", "etoposide"),
-                  trait == trt)%>%
-    dplyr::select(condition, trait, comparison, pval = adj.p.value) %>%
-    dplyr::mutate(strain = dplyr::case_when(comparison == "N2-ECA232" ~ "ECA232",
-                                            comparison == "ECA1114-CB4856" ~ "ECA1114",
-                                            TRUE ~ "NA"),
-                  sig = dplyr::case_when(pval < 0.0001 ~ "****",
-                                         pval < 0.001 ~ "***",
-                                         pval < 0.01 ~ "**",
-                                         pval < 0.05 ~ "*",
-                                         TRUE ~ "ns"))
 
 # select conditions
 nil_selected <- nildose %>%
@@ -131,10 +113,7 @@ nil_selected <- nildose %>%
                   control = ifelse(condition == control, "None", control))
 
 # regress control condition
-nil_regressed <- easysorter::regress(nil_selected)
-
-# plot phenotype
-pheno <-  nil_regressed %>%
+nil_regressed <- easysorter::regress(nil_selected) %>%
     dplyr::filter(trait == trt) %>%
     dplyr::group_by(condition) %>%
     dplyr::mutate(relative_pheno = ((phenotype - min(phenotype, na.rm = T)) / (max(phenotype, na.rm = T) - min(phenotype, na.rm = T)))) %>%
@@ -144,20 +123,51 @@ pheno <-  nil_regressed %>%
                                                  TRUE ~ "NIL"),
                   groups = dplyr::case_when(strain %in% c("N2", "ECA1132", "ECA1135", "ECA232") ~ "N2",
                                             strain %in% c("CB4856", "ECA1133", "ECA1134", "ECA1114") ~ "CB",
-                                            TRUE ~ "NIL")) %>%
-    dplyr::full_join(stats, by = c("strain", "condition", "trait")) %>%
+                                            TRUE ~ "NIL")) 
+
+maxpheno <- nil_regressed %>%
+    dplyr::group_by(groups, condition) %>%
+    dplyr::summarise(maxphen = max(phenotype))
+
+# stats2
+stats2 <- HTA_stats %>%
+    dplyr::filter(comparison %in% c("N2-ECA232", "ECA1114-CB4856"),
+                  experiment == "NIL",
+                  trait == trt) %>%
+    dplyr::select(condition, trait, comparison, pval = adj.p.value) %>%
+    dplyr::mutate(groups =  ifelse(grepl("N2", comparison), "N2", "CB")) %>%
+    dplyr::full_join(maxpheno, by = c("condition", "groups")) %>%
+    tidyr::separate(comparison, c("strain1", "strain2"), "-", remove = F) %>%
+    dplyr::mutate(yval = maxphen + 0.15,
+                  sig = dplyr::case_when(pval < 0.0001 ~ "****",
+                                         pval < 0.001 ~ "***",
+                                         pval < 0.01 ~ "**",
+                                         pval < 0.05 ~ "*",
+                                         TRUE ~ "ns"),
+                  movex = dplyr::case_when(pval < 0.0001 ~ 0.5-1,
+                                           pval < 0.001 ~ 0.5-1.5,
+                                           pval < 0.01 ~ 0.5-2,
+                                           pval < 0.05 ~ 0.5-3.5,
+                                           TRUE ~ 0.5-1.5),
+                  cols = ifelse(grepl("N2", comparison), "N2", "CB"))
+
+# plot phenotype
+pheno <-  nil_regressed %>%
+    # dplyr::full_join(stats, by = c("strain", "condition", "trait")) %>%
     dplyr::mutate(strain = factor(strain, 
                                   levels = rev(c("N2", "ECA232", "ECA1132", "ECA1135", "ECA1114", "ECA1133", "ECA1134", "CB4856")))) %>%
+    # labels = c("N2", "CB4856", "ECA232\nN2[V,CB>N2]", "ECA1114\nCB[V,N2>CB]", "ECA1132\nN2[scb-1∆]", "ECA1135\nN2[scb-1∆]", "ECA1133\nCB[scb-1∆]", "ECA1134\nCB[scb-1∆]"))) %>%
     dplyr::group_by(strain, condition) %>%
     dplyr::mutate(phen = max(phenotype) + 0.2) %>%
     ggplot(.) +
     aes(x = strain, y = phenotype, fill = strain_fill) +
     geom_jitter(width = 0.1, size = 0.05) +
     geom_boxplot(outlier.color = NA, alpha = 0.5, size = 0.2) +
-    ggplot2::geom_text(aes(label = sig, y = phen, color = groups), size = tsize/4, angle = -90) +
+    ggplot2::geom_segment(data = stats2, aes(x = strain1, xend = strain2, y = yval, yend = yval, color = cols), inherit.aes = F, size = 0.5) +
+    ggplot2::geom_text(data = stats2, aes(x = strain1, label = sig, y = yval + .15, hjust = movex, color = cols), size = tsize/4, inherit.aes = F, angle = -90) +
     scale_fill_manual(values = c("N2" = "orange", "CB" = "blue", "NIL" = "grey")) +
     scale_color_manual(values = c("N2" = "orange", "CB" = "blue")) +
-    scale_y_continuous(limits = c(0, 1.21),
+    scale_y_continuous(limits = c(0, 1.36),
                        breaks = seq(0,1, 0.5),
                        expand=expand_scale(mult=c(0.2,0.2))) +
     theme_bw(tsize) +
@@ -170,9 +180,8 @@ pheno <-  nil_regressed %>%
           panel.grid.minor = element_blank(),
           panel.grid.major = element_blank()) +
     coord_flip() +
-    labs(x = " ", y = "Relative residual animal length") +
+    labs(x = " ", y = "Relative median optical density") +
     facet_grid(.~condition)
-
 
 # plot chrV genotype
 chrVgeno <- nil_genotypes %>%
@@ -185,7 +194,6 @@ chrVgeno <- nil_genotypes %>%
     scale_color_manual(values=c("N2"="orange","CB4856"="blue"))+
     theme_bw(tsize) +
     theme(axis.text.x = element_text(face="bold", color="black"),
-          # axis.text.y = element_text(face="bold", color="black"),
           axis.text.y = element_blank(),
           axis.ticks.y = element_blank(),
           axis.title.x = element_text(face="bold", color="black"),
@@ -204,14 +212,13 @@ cowplot::plot_grid(chrVgeno, pheno, nrow = 1, ncol = 2, rel_widths = c(1, 4.5), 
 ggsave("figures/figure2_nilplots.png", width = 7.5, height = 2)
 
 
-
 ###############################
 # Figure 3
 # eqtl reanalysis
 ###############################
 
 # get gene locations
-load("data/FileS8_eqtlmap.Rda")
+eqtlmap <- read.csv("data/FileS9_eqtlmap.csv")
 
 # chr lengths
 df_chr_length <- data.frame(
@@ -220,12 +227,12 @@ df_chr_length <- data.frame(
     start = 0
 )
 
-eqtlmap <- eqtlmap %>%
-    dplyr::filter(!is.na(probe_chr))
-
 # factor to order chr
 eqtlmap$chr <- factor(eqtlmap$chr, levels = c("I", "II", "III", "IV", "V", "X"))
 eqtlmap$probe_chr <- factor(eqtlmap$probe_chr, levels = c("X", "V", "IV", "III", "II", "I"))
+
+eqtlmap <- eqtlmap %>%
+    dplyr::filter(!is.na(probe_chr))
 
 toplod <- eqtlmap %>%
     dplyr::filter(lod > 20)
@@ -242,7 +249,7 @@ eqtlplot <- ggplot(eqtlmap) +
     facet_grid(probe_chr~chr, scales = "free", space = "free") +
     theme_bw(tsize) +
     labs(x = "QTL position (Mb)", y = "Gene position (Mb)") +
-    scale_color_viridis(option = "C", name = "LOD") +
+    viridis::scale_color_viridis(option = "C", name = "LOD") +
     scale_size_continuous(range = c(0.1,2), guide = "none") +
     theme(panel.grid = element_blank(),
           legend.position = "right",
@@ -274,7 +281,6 @@ diffchr_trans <- eqtlmap %>%
 alltrans <- rbind(diffchr_trans, samechr_trans)
 
 # only use trans eQTL for identifying hotspots
-# load("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/data/raw/N2xCB4856cross_full2.Rda")
 linkagemapping::load_cross_obj("N2xCB4856cross_full")
 
 # riail marker conversion
@@ -407,6 +413,7 @@ hs <- data.frame(chr = c("II", "IV", "IV", "IV", "V", "V", "V", "X", "X"), pos =
                  peaks_bin = c(30, 70, 30, 50, 30, 30, 30, 80, 30), sig = c(F, T, F, T, F, F, F, T, F)) %>%
     dplyr::mutate(pos = pos*1e6)
 
+yval <- -10
 cm5 <- summary[[3]] %>%
     dplyr::mutate(hotspot = " ") %>%
     ggplot2::ggplot() +
@@ -414,7 +421,11 @@ cm5 <- summary[[3]] %>%
     geom_rect(data=df_chr_length, aes(xmin =  start/1e6, xmax = stop/1e6, ymin = 1, ymax=1.01), color='transparent', fill='transparent', size =0.1, inherit.aes = F) +
     ggplot2::theme_bw(tsize) +
     ggplot2::geom_line()+
-    ggplot2::geom_text(data = hs, label = "*", fontface = "bold", size = 5) +
+    ggplot2::geom_text(data = hs, label = "*", fontface = "bold", size = 5, aes(color = sig)) +
+    ggplot2::geom_segment(data = hs %>% dplyr::filter(chr == "IV"), aes(x = 5, xend = 12, y = yval, yend = yval), size = 1, color = "grey30") + #chrIVL drug hotspot
+    ggplot2::geom_segment(data = hs %>% dplyr::filter(chr == "IV"), aes(x = 15, xend = 17, y = yval, yend = yval), size = 1, color = "grey30") + #chrIVR drug hotspot
+    ggplot2::geom_segment(data = hs %>% dplyr::filter(chr == "V"), aes(x = 7, xend = 13, y = yval, yend = yval), size = 1, color = "grey30") + #chrV drug hotspot
+    ggplot2::scale_color_manual(values = c("TRUE" = "blue", "FALSE" = 'black')) +
     ggplot2::geom_hline(yintercept = qpois(summary[[2]]$pval, summary[[2]]$lambda), color = "red") +
     ggplot2::facet_grid(.~chr, scales = "free", space = "free") +
     ggplot2::labs(x = "QTL position (Mb)", y = "Number of QTL") +
@@ -424,7 +435,6 @@ cm5 <- summary[[3]] %>%
           axis.text = element_text(face = "bold", color = "black"),
           strip.text = element_text(face = "bold")) +
     ggplot2::geom_vline(data = data.frame(chr = "V"), aes(xintercept = 11.11), linetype = "dashed", color = "navy", size = 0.5)
-# cm5
 
 # plot eqtl and hotspots together
 cowplot::plot_grid(eqtlplot, cm5, nrow = 2, align = "v", axis = "lr", labels = c("A", "B"), rel_heights = c(1, 0.3))
@@ -439,31 +449,29 @@ ggsave("figures/figure3_eqtlplot.png", height = 8, width = 7.5)
 ###############################
 
 # load data
-load("data/FileS11_scb1_mediation.Rda")
-load("data/FileS3_mappingdf.Rda")
+scb1_mediation <- read.csv("data/FileS12_scb1_mediation.csv")
+set1_mappingdf <- read.csv("data/FileS11_set1_mappingdf.csv")
 
 # add condtrt
-mappingdf <- mappingdf %>%
+mappingdf <- set1_mappingdf %>%
     dplyr::mutate(condtrt = paste0(condition, "_", trait))
 
 # choose one trait for each drug (highest LOD) that overlaps with scb-1 and show lod plot for all (only chrV?)
 chrVtraits <- mappingdf %>%
-    dplyr::filter(chr == "V", 
+    dplyr::filter(chr == "V",
                   ci_l_pos < 11119730,
                   ci_r_pos > 11118721) %>%
     na.omit() %>%
-    dplyr::group_by(condition) %>%
-    dplyr::arrange(desc(lod)) %>%
-    dplyr::filter(row_number() == 1)
+    dplyr::filter(drugtrait %in% c("bleomycin_median.EXT", "amsacrine_median.EXT", "cisplatin_median.TOF", "silver_median.norm.EXT"))
 
 tsize <- 10
 # plot all three drugs together
 scb1_mediation %>%
+    dplyr::filter(trait %in% c("bleomycin_median.EXT", "amsacrine_median.EXT", "cisplatin_median.TOF", "silver_median.norm.EXT"))%>%
     dplyr::mutate(abs_est = abs(estimate)) %>%
     tidyr::separate(marker, c("chrom", "pos"), "_") %>%
     dplyr::mutate(pos = as.numeric(pos)) %>%
     dplyr::filter(var == "prop_med") %>%
-                  # grepl("bleomycin|amsacrine|carmustine|cisplatin|etoposide", trait)) %>%
     dplyr::arrange(pos) %>%
     dplyr::mutate(scb1 = ifelse(probe == "A_12_P104350", "yes", "no"),
                   condition = stringr::str_split_fixed(trait, "_", 2)[,1]) %>%
@@ -485,12 +493,12 @@ scb1_mediation %>%
           axis.text = element_text(face="bold", color="black"),
           axis.title = element_text(face="bold", color="black"),
           strip.text = element_text(face = "bold", color = "black")) +
-    geom_hline(aes(yintercept = q95), color = "grey") +
-    facet_wrap(~condition, scales = "free", nrow = 2) +
+    geom_hline(aes(yintercept = q90), color = "grey") +
+    facet_wrap(~condition, scales = "free", nrow = 1) +
     geom_vline(data = chrVtraits, aes(xintercept = ci_l_pos/1e6), color = "blue", linetype = "dashed") +
     geom_vline(data = chrVtraits, aes(xintercept = ci_r_pos/1e6), color = "blue", linetype = "dashed")
 
-ggsave("figures/figure4_mediation.png", height = 4, width = 7.5)
+ggsave("figures/figure4_mediation.png", height = 2.5, width = 7.5)
 
 
 ###############################
@@ -499,56 +507,58 @@ ggsave("figures/figure4_mediation.png", height = 4, width = 7.5)
 ###############################
 
 # load data
-load("data/FileS12_scb1_pruned.Rda")
-load("data/FileS4_nil_genotypes.Rda")
-load("data/FileS6_HTA_stats.Rda")
+scb1_pruned <- read.csv("data/FileS13_scb1_pruned.csv")
+nil_genotypes <- read.csv("data/FileS5_nil_genotypes.csv")
+HTA_stats <- read.csv("data/FileS7_HTA_stats.csv")
 
 # plot all drugs for median.EXT
 trt <- "median.EXT"
-tsize <- 10 #8
-
-# stats
-stats <- HTA_stats %>%
-    dplyr::filter(comparison %in% c("N2-ECA232", "N2-ECA1132", "N2-ECA1135", "ECA1114-CB4856", "ECA1133-CB4856", "ECA1134-CB4856"),
-                  experiment == "CRISPR") %>%
-                  # condition %in% c("bleomycin", "amsacrine", "carmustine", "cisplatin", "etoposide"))%>%
-    dplyr::select(condition, trait, comparison, pval = adj.p.value) %>%
-    dplyr::mutate(strain = dplyr::case_when(comparison == "N2-ECA232" ~ "ECA232",
-                                            comparison == "N2-ECA1132" ~ "ECA1132",
-                                            comparison == "N2-ECA1135" ~ "ECA1135",
-                                            comparison == "ECA1114-CB4856" ~ "ECA1114",
-                                            comparison == "ECA1133-CB4856" ~ "ECA1133",
-                                            comparison == "ECA1134-CB4856" ~ "ECA1134",
-                                            TRUE ~ "NA"),
-                  sig = dplyr::case_when(pval < 0.0001 ~ "****",
-                                         pval < 0.001 ~ "***",
-                                         pval < 0.01 ~ "**",
-                                         pval < 0.05 ~ "*",
-                                         TRUE ~ "ns"))
+tsize <- 10
 
 # regress scb-1
 scb1_regressed <- easysorter::regress(scb1_pruned) %>%
-    dplyr::filter(strain %in% c("N2", "CB4856", "ECA1134", "ECA1132"))
-
-# plot
-pheno <- scb1_regressed %>%
+    dplyr::filter(strain %in% c("N2", "CB4856", "ECA1134", "ECA1132")) %>%
     dplyr::filter(trait == trt) %>%
     dplyr::group_by(condition) %>%
     dplyr::mutate(relative_pheno = ((phenotype - min(phenotype, na.rm = T)) / (max(phenotype, na.rm = T) - min(phenotype, na.rm = T)))) %>%
     dplyr::mutate(phenotype = relative_pheno) %>%
-    dplyr::mutate(#strain_fill = dplyr::case_when(strain %in% c("N2", "ECA1132", "ECA1135") ~ "N2",
-                   #                              strain %in% c("CB4856", "ECA1133", "ECA1134") ~ "CB",
-                    #                             TRUE ~ "NIL"),
-        strain_fill = dplyr::case_when(strain %in% c("N2") ~ "N2",
-                                       strain %in% c("CB4856") ~ "CB",
-                                       TRUE ~ "NIL"),
+    dplyr::mutate(strain_fill = dplyr::case_when(strain %in% c("N2") ~ "N2",
+                                                 strain %in% c("CB4856") ~ "CB",
+                                                 TRUE ~ "NIL"),
                   groups = dplyr::case_when(strain %in% c("N2", "ECA1132", "ECA1135", "ECA232") ~ "N2",
                                             strain %in% c("CB4856", "ECA1133", "ECA1134", "ECA1114") ~ "CB",
-                                            TRUE ~ "NIL")) %>%
-    dplyr::full_join(stats, by = c("strain", "condition", "trait")) %>%
+                                            TRUE ~ "NIL"))
+
+maxpheno <- scb1_regressed %>%
+    dplyr::group_by(groups, condition) %>%
+    dplyr::summarise(maxphen = max(phenotype))
+
+# stats2
+stats2 <- HTA_stats %>%
+    dplyr::filter(comparison %in% c("N2-ECA1132", "ECA1134-CB4856"),
+                  experiment == "CRISPR",
+                  trait == trt) %>%
+    dplyr::select(condition, trait, comparison, pval = adj.p.value) %>%
+    dplyr::mutate(groups =  ifelse(grepl("N2", comparison), "N2", "CB")) %>%
+    dplyr::full_join(maxpheno, by = c("condition", "groups")) %>%
+    tidyr::separate(comparison, c("strain1", "strain2"), "-", remove = F) %>%
+    dplyr::mutate(yval = maxphen + 0.1,
+                  sig = dplyr::case_when(pval < 0.0001 ~ "****",
+                                         pval < 0.001 ~ "***",
+                                         pval < 0.01 ~ "**",
+                                         pval < 0.05 ~ "*",
+                                         TRUE ~ "ns"),
+                  movex = dplyr::case_when(pval < 0.0001 ~ 0.5-1,
+                                           pval < 0.001 ~ 0.5-1.5,
+                                           pval < 0.01 ~ 0.5-2,
+                                           pval < 0.05 ~ 0.5-3.5,
+                                           TRUE ~ 0.5-1.5),
+                  cols = ifelse(grepl("N2", comparison), "N2", "CB"))
+
+# plot
+pheno <- scb1_regressed %>%
     dplyr::mutate(strain = factor(strain, 
                                   levels = rev(c("N2", "ECA1132", "ECA1134", "CB4856")))) %>%
-    # labels = c("N2", "CB4856", "ECA232\nN2[V,CB>N2]", "ECA1114\nCB[V,N2>CB]", "ECA1132\nN2[scb-1∆]", "ECA1135\nN2[scb-1∆]", "ECA1133\nCB[scb-1∆]", "ECA1134\nCB[scb-1∆]"))) %>%
     dplyr::group_by(strain, condition) %>%
     dplyr::filter(!is.na(strain)) %>%
     dplyr::mutate(phen = max(phenotype) + 0.2) %>%
@@ -556,10 +566,11 @@ pheno <- scb1_regressed %>%
     aes(x = strain, y = phenotype, fill = strain_fill) +
     geom_jitter(width = 0.1, size = 0.05) +
     geom_boxplot(outlier.color = NA, alpha = 0.5, size = 0.2) +
-    ggplot2::geom_text(aes(label = sig, y = phen, color = groups), size = tsize/4, angle = -90) +
+    ggplot2::geom_segment(data = stats2, aes(x = strain1, xend = strain2, y = yval, yend = yval, color = cols), inherit.aes = F, size = 0.5) +
+    ggplot2::geom_text(data = stats2, aes(x = strain1, label = sig, y = yval+0.15, hjust = movex, color = cols), size = tsize/4, inherit.aes = F, angle = -90) +
     scale_fill_manual(values = c("N2" = "orange", "CB" = "blue", "NIL" = "grey")) +
     scale_color_manual(values = c("N2" = "orange", "CB" = "blue")) +
-    scale_y_continuous(limits = c(0, 1.21),
+    scale_y_continuous(limits = c(0, 1.36),
                        breaks = seq(0,1, 0.5),
                        expand=expand_scale(mult=c(0.2,0.2))) +
     theme_bw(tsize) +
@@ -572,7 +583,7 @@ pheno <- scb1_regressed %>%
           panel.grid.minor = element_blank(),
           panel.grid.major = element_blank()) +
     coord_flip() +
-    labs(x = " ", y = "Relative residual animal length") +
+    labs(x = " ", y = "Relative median optical density") +
     facet_grid(.~condition)
 
 # fake ECA1132 geno
@@ -622,3 +633,4 @@ cowplot::plot_grid(chrVgeno, pheno, nrow = 1, ncol = 2, rel_widths = c(1, 4.5), 
 
 # save plot
 ggsave("figures/figure5_scb1delplot.png", width = 7.5, height = 2)
+

@@ -1,0 +1,661 @@
+---
+output: pdf_document
+geometry: margin=1in
+mainfont: Times New Roman
+---
+
+```{r setup, include=FALSE, warning=F, message=F, echo=F,comment="K",results='hide'}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, results = "asis")
+
+library(tidyverse)
+library(linkagemapping)
+library(magick)
+
+###############################
+# IMPORTANT!!!!!
+# Set working directory
+setwd("~/Dropbox/AndersenLab/LabFolders/Katie/projects/scb1_mediation_manuscript/")
+###############################
+
+
+```
+
+```{r figure_s1, fig.height = 6, fig.width = 7.5}
+###############################
+# Figure S1
+# V2 dose response
+###############################
+
+# load data
+dosepruned <- read.csv("data/FileS1_dosepruned.csv")
+
+# adjust for differences in control with subtraction
+dosepruned_sub <- NULL
+for(t in c("median.TOF", "median.norm.EXT", "norm.n", "median.EXT")) {
+    for(c in unique(dosepruned$condition)) {
+        dosepruned2 <- dosepruned %>%
+            dplyr::filter(trait == t, condition == c) 
+        
+        # get average control phenotype for each strain
+        dosepruned3 <- dosepruned2 %>%
+            dplyr::group_by(strain, dose, trait) %>%
+            dplyr::filter(., dose == 0) %>%
+            dplyr::mutate(mean_ctrl = mean(phenotype)) %>%
+            dplyr::ungroup() %>%
+            dplyr::select(condition, strain, mean_ctrl) %>%
+            dplyr::full_join(dosepruned2, by = c("condition", "strain")) %>%
+            dplyr::distinct() %>%
+            dplyr::mutate(newpheno = phenotype - mean_ctrl)
+        
+        # add to final df
+        dosepruned_sub <- rbind(dosepruned_sub, dosepruned3)
+    }
+}
+
+# add star over each chosen dose
+chosen_dose <- data.frame(
+    condition = c("cisplatin", "amsacrine", "bortezomib", "carmustine", "etoposide", "bleomycin", "puromycin", 'silver'),
+    dose = as.character(as.character(c(500, 100, 2, 250, 500, 50, 500, 150))),
+    chosendose = as.character(c(500, 100, 2, 250, 500, 50, 500, 150)),
+    choose = "*"
+)
+
+# plot doses
+dosepruned_sub %>%
+    dplyr::full_join(chosen_dose, by = c("condition", "dose")) %>%
+    dplyr::group_by(condition, trait, dose) %>%
+    dplyr::mutate(phen = max(newpheno, na.rm = T)) %>%
+    dplyr::group_by(condition, trait, dose, strain) %>%
+    dplyr::mutate(avg = mean(newpheno, na.rm = T),
+                  sd = sd(newpheno, na.rm = T)) %>% 
+    dplyr::ungroup() %>%
+    dplyr::mutate(dose = as.numeric(dose)) %>%
+    tidyr::drop_na(condition) %>%
+    dplyr::arrange(dose) %>%
+    dplyr::distinct(condition, trait, dose, strain, .keep_all = T) %>%
+    ggplot2::ggplot(.) +
+    ggplot2::aes(x = factor(dose), color = strain, group = interaction(strain, dose)) +
+    ggplot2::geom_jitter(aes(y = avg), width = 0.1) +
+    ggplot2::geom_line(aes(y = avg, group = strain)) +
+    ggplot2::geom_text(aes(y = phen, label = choose), color = "red", size = 6) +
+    ggplot2::theme_bw(8) +
+    ggplot2::theme(panel.grid = element_blank(),
+                   axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "black"),
+                   axis.text.y = element_text(face = "bold", color = "black"),
+                   axis.title = element_text(face = "bold", color = "black")) +
+    ggplot2::facet_grid(trait~condition, scales = "free") +
+    ggplot2::labs(x = "Dose (µM)", y = "Phenotype") +
+    ggplot2::scale_color_manual(values = c("N2" = "orange", "CB4856" = "blue",
+                                          "DL238" = "green", "JU258" = "purple"),
+                               name = "Strain")
+
+```
+
+**Figure S1** Dose response with four divergent wild isolates. Results from dose response HTA for all eight chemotherapeutics (x-axis) for each trait (y-axis). For each drug-response trait, drug concentration (µM) (x-axis) is plotted against phenotype subtracted from control (y-axis), colored by strain (CB4856: blue, DL238: green, JU258: purple, N2: orange). A red asterisk indicates the dose selected for linkage mapping analysis.
+
+```{r}
+cat("\n\n\n")
+cat("\n\n\\pagebreak\n")
+```
+
+
+```{r figure_s2, fig.height = 2, fig.width = 7.5}
+###############################
+# Figure S2
+# Linkage and RIAIL PxG
+###############################
+
+# load data
+mappingdf <- read.csv("data/FileS3_mappingdf.csv")
+riailpheno <- read.csv("data/FileS2_riailpheno.csv")
+linkagemapping::load_cross_obj("N2xCB4856cross_full")
+
+# add condtrt
+mappingdf <- mappingdf %>%
+    dplyr::mutate(condtrt = paste0(condition, "_", trait))
+
+peaks <- mappingdf %>%
+    na.omit()
+
+# linkage mapping function - facet by all conditions
+plot_lods <- function(map, tsize = 12) {
+    map1 <- map %>% 
+        dplyr::group_by(marker, condtrt) %>% 
+        dplyr::filter(lod == max(lod))
+    cis <- map %>% 
+        dplyr::group_by(marker, condtrt) %>% 
+        dplyr::mutate(maxlod = max(lod)) %>%
+        dplyr::group_by(iteration, condtrt) %>% 
+        dplyr::filter(!is.na(var_exp)) %>%
+        dplyr::do(head(., n = 1))
+    
+    totalmap <- NULL
+    for(i in unique(cis$condtrt)) {
+        drugci <- cis %>%
+            dplyr::filter(condtrt == i)
+        drugmap <- map1 %>%
+            dplyr::filter(condtrt == i)
+        map2 <- linkagemapping:::cidefiner(drugci, drugmap)
+        totalmap <- rbind(totalmap, map2)
+    }
+    
+    totalmap$condtrt <- gsub("_", "\n", totalmap$condtrt)
+    cis$condtrt <- gsub("_", "\n", cis$condtrt)
+    
+    ggplot2::ggplot(totalmap) + 
+        ggplot2::aes(x = pos/1e+06,y = lod) + 
+        ggplot2::geom_ribbon(ggplot2::aes(x = pos/1e+06,ymin = 0, ymax = ci_lod), fill = "skyblue", alpha = 0.5) +
+        ggplot2::geom_point(data = cis, ggplot2::aes(x = pos/1e+06,y = (1.05 * maxlod)), fill = "red", shape = 25,
+                            size = tsize/10, show.legend = FALSE, color = "red") + 
+        ggplot2::geom_text(data = cis, ggplot2::aes(x = pos/1e+06, y = (1.2 * maxlod), label = paste0(100 *round(var_exp, digits = 3), "%")), 
+                           size = tsize/5, colour = "black", hjust = "inward") + 
+        ggplot2::geom_line(size = tsize/25, alpha = 0.85) +
+        ggplot2::facet_grid(condtrt ~ chr, scales = "free") +
+        ggplot2::labs(x = "Genomic position (Mb)", y = "LOD") +
+        ggplot2::scale_colour_discrete(name = "Mapping\nIteration") +
+        ggplot2::theme_bw(tsize) +
+        ggplot2::theme(
+            axis.text.x = ggplot2::element_text(color = "black", face = "bold"),
+            axis.text.y = ggplot2::element_text(face = "bold", color = "black"),
+            axis.title.x = ggplot2::element_text(face = "bold", color = "black"),
+            axis.title.y = ggplot2::element_text(face = "bold", color = "black"),
+            strip.text.x = ggplot2::element_text(face = "bold", color = "black"),
+            strip.text.y = ggplot2::element_text(face = "bold", color = "black"),
+            plot.title = ggplot2::element_blank(),
+            panel.grid = ggplot2::element_blank(),
+            panel.background = ggplot2::element_rect(color = NA, size = 0.6))
+}
+
+# function for PxG - for supp figure
+plot_pxg <- function(cross, map, tsize = 12) {
+    
+    # get unique QTL peaks
+    peaks <- map %>% 
+        dplyr::group_by(iteration, condition) %>% 
+        dplyr::filter(!is.na(var_exp)) %>% 
+        dplyr::do(head(., n = 1))
+    
+    # clean the markers and column names
+    uniquemarkers <- gsub("-", "\\.", unique(peaks$marker))
+    colnames(cross$pheno) <- gsub("-", "\\.", colnames(cross$pheno))
+    colnames(cross$pheno) <- stringr::str_replace(colnames(cross$pheno), "\\.", "_")
+    
+    # get only the traits of interest
+    pheno <- cross$pheno %>% 
+        dplyr::select(dplyr::one_of(map$condtrt))
+    
+    # get the genotype for the RIAILs and add to pheno
+    geno <- data.frame(linkagemapping:::extract_genotype(cross)) %>% 
+        dplyr::select(which(colnames(.) %in% uniquemarkers)) %>% 
+        data.frame(., pheno)
+    
+    # reorder data and change -1 and 1 to N2 and CB and plot!
+    geno %>%
+        tidyr::gather(marker, genotype, -dplyr::one_of(map$condtrt)) %>%
+        dplyr::mutate(genotype = dplyr::case_when(genotype == -1 ~ "N2",
+                                                  genotype == 1 ~ "CB4856",
+                                                  TRUE ~ "NA")) %>%
+        tidyr::gather(trait, phenotype, dplyr::one_of(map$condtrt)) %>%
+        tidyr::drop_na(genotype) %>%
+        dplyr::mutate(genotype = factor(genotype, levels = c("N2", "CB4856"), labels= c("N2 Allele", "CB4856 Allele"))) %>%
+        dplyr::left_join(peaks, by = c("marker", "trait" = "condtrt")) %>%
+        tidyr::drop_na(lod) %>%
+        dplyr::mutate(marker = stringr::str_replace(marker, "_", ":"),
+                        trait = stringr::str_split_fixed(trait, "_", 2)[,2]) %>%
+        ggplot2::ggplot(.) + 
+        ggplot2::aes(x = genotype, y = phenotype) +
+        ggplot2::geom_jitter(width = 0.1, size = 0.07, alpha = 0.5) + 
+        ggplot2::geom_boxplot(ggplot2::aes(fill = genotype, alpha = 0.5), size = 0.2, outlier.shape = NA) + 
+        ggplot2::scale_fill_manual(values = c(`N2 Allele` = "orange", `CB4856 Allele` = "blue")) + 
+        ggplot2::facet_grid(trait~marker, scales = "free") + 
+        ggplot2::theme_bw(tsize) + 
+        ggplot2::theme(axis.text.x = ggplot2::element_text(face = "bold", color = "black"), 
+                       axis.text.y = ggplot2::element_text(face = "bold", color = "black"), 
+                       # axis.title.x = ggplot2::element_text(face = "bold", color = "black", vjust = -0.3), 
+                       axis.title.y = ggplot2::element_text(face = "bold", color = "black"), 
+                       strip.text.x = ggplot2::element_text(face = "bold", color = "black"),
+                       strip.text.y = ggplot2::element_text(face = "bold", color = "black"),
+                       axis.title.x = element_blank(),
+                       plot.title = ggplot2::element_blank(), 
+                       legend.position = "none", 
+                       panel.background = ggplot2::element_rect(color = NA, size = 0.6)) +
+        ggplot2::labs(x = "", y = "Phenotype")
+}
+
+# create cross object
+drugcross <- linkagemapping::mergepheno(N2xCB4856cross_full2, riailpheno, set = 2)
+
+# for each trait, plot lod and riail pxg
+for(c in sort(unique(peaks$condition))) {
+    conddf <- peaks %>%
+        dplyr::filter(condition == c)
+    for(t in unique(conddf$condtrt)) {
+        # plot lod
+        lod <- plot_lods(mappingdf %>%
+                            dplyr::filter(condtrt == t),
+                         tsize = 8) +
+            ggplot2::geom_vline(data = data.frame(chr = "V", condtrt = gsub("_", "\n", t)), aes(xintercept = 11.11), linetype = "dashed", color = "navy", size = 0.5)
+        
+        # is there a qtl that overlaps scb1?
+        qtlmap <- mappingdf %>%
+                            dplyr::filter(condtrt == t,
+                                          chr == "V",
+                                          ci_l_pos < 12000000,
+                                          ci_r_pos > 10000000)
+        
+        if(nrow(qtlmap) > 0) {
+            # plot pxg for chrV QTL only
+            pxg <- plot_pxg(drugcross,
+                            qtlmap,
+                            tsize = 8)
+            # combine lod and pxg
+            print(cowplot::plot_grid(lod, pxg, nrow = 1, ncol = 2, rel_widths = c(3, 1), align = "h", axis = "b", labels = c("A", "B")))
+        } else {
+            # combine lod and pxg
+            test <- ggplot2::ggplot() +
+                ggplot2::theme_bw() +
+                ggplot2::theme(panel.border = element_rect(color = "grey99", size = 0.0001)) + ### THIS IS RIDICULOUS
+                ggplot2::labs(x = " ", y = " ")
+            print(cowplot::plot_grid(lod, test, nrow = 1, ncol = 2, align = "h", rel_widths = c(3, 1), labels = c("A", "")))
+        }
+            cat("\n\n\n")
+    }
+    cat("\n\n\n")
+    cat("\n\n\\pagebreak\n") # might need fixed...
+}
+
+```
+
+**Figure S2** Linkage mapping analysis for all drug-response traits. For each drug-response trait, (A) genomic position (x-axis) is plotted against the logarithm of the odds (LOD) score (y-axis) for 13,003 genomic markers. Each significant QTL is indicated by a red triangle at the peak marker, and a blue rectangle shows the 95% confidence interval around the peak marker. The percentage of the total variance in the RIAIL population that can be explained by each QTL is shown above the QTL. The dotted vertical line represents the genomic position of *scb-1*. (B) For each QTL on chromosome V plotted in A, the residual phenotypes (y-axis) of RIAILs split by genotype at the marker with the maximum LOD score (x-axis) are plotted as Tukey box plots. Each point corresponds to a unique recombinant strain. Strains with the N2 allele are colored orange and strains with the CB4856 allele are colored blue.
+
+```{r}
+cat("\n\n\n")
+cat("\n\n\\pagebreak\n")
+```
+
+```{r figure_s3, fig.height = 6, fig.width = 7.5}
+###############################
+# Figure S3
+# NIL results chrV - dose
+###############################
+
+# load data
+nildose <- read.csv("data/FileS6_nildose.csv")
+
+# adjust for differences in control with subtraction
+nildose_sub <- NULL
+for(c in unique(nildose$condition)) {
+    for(t in unique(nildose$trait)) {
+        nildose2 <- nildose %>%
+            dplyr::filter(condition == c, trait == t) 
+        
+        # get average control phenotype for each strain
+        nildose3 <- nildose2 %>%
+            dplyr::group_by(strain, drug, trait) %>%
+            dplyr::filter(., dose == 0) %>%
+            dplyr::mutate(mean_ctrl = mean(phenotype)) %>%
+            dplyr::ungroup() %>%
+            dplyr::select(condition, strain, mean_ctrl) %>%
+            dplyr::full_join(nildose2, by = c("condition", "strain")) %>%
+            dplyr::distinct() %>%
+            dplyr::mutate(newpheno = phenotype - mean_ctrl)
+        
+        # add to final df
+        nildose_sub <- rbind(nildose_sub, nildose3)
+    }
+}
+
+# add star over each chosen dose
+chosen_dose <- data.frame(
+    condition = c("cisplatin", "amsacrine", "bortezomib", "carmustine", "etoposide", "bleomycin", "puromycin", 'silver'),
+    dose = c(125, 12.5, 2, 250, 62.5, 12.5, 300, 100),
+    chosendose = as.character(c(125, 12.5, 2, 250, 62.5, 12.5, 300, 100)),
+    choose = "*"
+)
+
+# look at dose
+for(c in sort(unique(nildose_sub$condition))) {
+    doseplot <- nildose_sub %>% 
+        dplyr::full_join(chosen_dose, by = c("condition", "dose")) %>%
+        dplyr::filter(condition == c) %>%
+        dplyr::group_by(condition, trait, dose) %>%
+        dplyr::mutate(phen = max(newpheno, na.rm = T)) %>%
+        dplyr::mutate(background = ifelse(strain %in% c("N2", "ECA232"), "N2", "CB")) %>%
+        tidyr::drop_na(condition) %>%
+        # dplyr::filter(trait == "median.EXT") %>%
+        ggplot2::ggplot(.) +
+        ggplot2::aes(x = as.factor(dose), y = newpheno, fill = strain) +
+        ggplot2::geom_boxplot(alpha = 0.5, outlier.color = NA, lwd = 0.25) +
+        ggplot2::geom_text(aes(y = phen, label = choose), color = "red", size = 6) +
+        ggplot2::theme_bw(12) +
+        ggplot2::theme(panel.grid = element_blank(),
+                       axis.text = element_text(face = "bold", color = "black"),
+                       axis.title = element_text(face = "bold", color = "black"),
+                       strip.text = element_text(face = "bold", color = "black")) +
+        ggplot2::facet_grid(trait~stringr::str_to_title(condition), scales = "free") +
+        ggplot2::labs(x = "Dose (µM)", y = "Relative phenotype") +
+        ggplot2::scale_fill_manual(values = c("N2" = "orange", "CB4856" = "blue",
+                                     "ECA232" = "grey", "ECA1114" = "tan"),
+                          name = "Strain")
+    
+    print(doseplot)
+    cat("\n\n\n")
+    cat("\n\n\\pagebreak\n")
+}
+
+
+```
+
+**Figure S3** Dose responses for NILs and parents with modified HTA. For each drug, animal length (median.TOF), integrated optical density over length (median.EXT), and normalized optical density (median.norm.EXT) were measured for each strain, colored by genotype, across increasing drug concentrations (µM, x-axis). For each strain, phenotype is subtracted from the control phenotype. A red asterisk indicates the dose selected for further experiments.
+
+```{r}
+cat("\n\n\n")
+cat("\n\n\\pagebreak\n")
+```
+
+```{r, fig.height = 4, fig.width = 5}
+
+parta <- cowplot::ggdraw() +
+  cowplot::draw_image("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/figures/supp/partA.png")
+
+partb <- cowplot::ggdraw() +
+  cowplot::draw_image("~/Dropbox/AndersenLab/LabFolders/Katie/projects/eQTL_mediation/manuscript/figures/supp/partB.png")
+
+cowplot::plot_grid(parta, partb, nrow = 2, labels = c("A", "B"))
+
+```
+
+**Figure S4** Model for gene expression as a mediator of a drug-response QTL. (A) The effect size of a QTL is calculated as the total effect a genetic variant has on the phenotypic variation of the population, regardless of the causal association of the genetic variant. (B) Mediation analysis tests the hypothesis that a genetic variant does not directly lead to phenotypic variation but rather causes a change in gene expression that further drives the change in phenotype observed. The “Direct Effect” can be calculated by including gene expression as a cofactor in the linear model between genotype and phenotype and extracting the partial coefficient of the effect of genotype on phenotype. The “Mediation Effect” can be calculated by subtracting the “Total Effect” - “Direct Effect”. Mediation estimates are then calculated as the proportion of the “Total Effect” that can be explained by the “Mediation Effect” (“Mediation Effect” / “Total Effect”)
+
+```{r}
+cat("\n\n\n")
+cat("\n\n\\pagebreak\n")
+```
+
+
+```{r figure_s5,  fig.height = 7, fig.width = 7.5}
+###############################
+# Figure S5
+# set1 linkage mapping
+###############################
+
+# load data
+set1_mappingdf <- read.csv("data/FileS11_set1_mappingdf.csv")
+
+peaks <- set1_mappingdf %>%
+    na.omit()
+
+# plot all QTL from linkagemapping for several traits/conditions
+# annotatedmap - annotated mapping (result from `linkagemapping::annotate_lods()`)
+# nils - buggy, might not work. Supply a dataframe of nil genotype information as ci_l_pos and ci_r_pos define the region of the NIL. Will be plotted as a red rectangle on the plot.
+newmap <- set1_mappingdf %>%
+    arrange(chr, ci_l_pos, ci_r_pos) %>%
+    na.omit() %>%
+    dplyr::mutate(n2res = ifelse(eff_size < 0, "yes", "no")) 
+
+#Set chromosome boundaries
+regions <- c("I:1-14972282", "II:1-15173999", "III:1-13829314", "IV:1-17450860", "V:1-20914693", "X:1-17748731")
+newrows <- newmap[1:6,] %>%
+    dplyr::mutate(regions = regions) %>%
+    tidyr::separate(regions, c("chr", "regions"), ":") %>%
+    tidyr::separate(regions, c("ci_l_pos", "ci_r_pos"), "-") %>%
+    dplyr::mutate(ci_l_pos = as.numeric(ci_l_pos),
+                  ci_r_pos = as.numeric(ci_r_pos))
+
+chrVtraits <- unique(newmap$condition)
+    
+#Plot
+ggplot2::ggplot(newmap)+
+    ggplot2::aes(x=pos/1E6, y=trait)+
+    ggplot2::theme_bw(8) +
+    viridis::scale_fill_viridis(name = "LOD") + 
+    viridis::scale_color_viridis(name = "LOD") +
+    ggplot2::geom_segment(aes(x = ci_l_pos/1e6, y = trait, xend = ci_r_pos/1e6, yend = trait, color = lod), size = 1, alpha = 1) +
+    ggplot2::geom_segment(data=newrows,aes(x = 0, y = trait, xend = ci_r_pos/1e6, yend = trait), size = 2.5, alpha = 0) +
+    ggplot2::geom_point(aes(fill = lod, shape = n2res), color = "black",size = 2, alpha = 1, stroke = 0.3)+
+    ggplot2::scale_shape_manual(values = c("yes" = 24, "no" = 25)) +
+    ggplot2::xlab("Genomic position (Mb)") + ylab("") +
+    ggplot2::guides(shape = FALSE) +
+    ggplot2::theme_bw(12) +
+    ggplot2::theme(axis.text.x = element_text(face="bold", color="black"),
+          axis.ticks.y = element_blank(),
+          legend.title = element_text(face = "bold"),
+          legend.key.size = unit(.75, "cm"),
+          panel.grid.major.x = element_line(),
+          panel.grid.major.y = element_line(),
+          panel.grid.minor.y = element_blank(),
+          axis.text.y = element_text(face = "bold", color = "black"),
+          axis.title.x = element_text(face="bold", color= "black"),
+          axis.title.y = element_blank(),
+          strip.text.x = element_text(face="bold", color="black"),
+          strip.text.y = element_text(face="bold", color="black", angle = 0),
+          # strip.background = element_rect(colour = "black", fill = "white", size = 0.75, linetype = "solid"),
+          plot.title = element_text(face="bold")) +
+    ggplot2::facet_grid(condition ~ chr, scales = "free_x", space = "free") +
+    ggplot2::geom_vline(data = data.frame(chr = "V", condtrt = chrVtraits), aes(xintercept = 11.11), linetype = "dashed", color = "navy", size = 0.5)
+
+```
+
+**Figure S5** Linkage mapping summary for drug-response traits in the set 1 RIAILs. Genomic positions (x-axis) of all QTL identified from linkage mapping are shown for each drug-trait (y-axis). Each QTL is plotted as a triangle at the genomic location of the peak marker and a line that represents the 95% confidence interval. QTL with right side up triangles have a negative effect size (N2 allele is resistant), and QTL with upside down triangles have a positive effect size (CB4856 allele is resistant). QTL are colored by the logarithm of the odds (LOD) score, increasing in significance from purple to green to yellow. The dotted vertical line represents the genomic position of *scb-1*. 
+
+```{r}
+cat("\n\n\n")
+cat("\n\n\\pagebreak\n")
+```
+
+
+```{r figure_s6,  fig.height = 8, fig.width = 7.5}
+
+# load data
+scb1_mediation <- read.csv("data/FileS12_scb1_mediation.csv")
+set1_mappingdf <- read.csv("data/FileS11_set1_mappingdf.csv")
+
+chrVtraits <- set1_mappingdf %>%
+    dplyr::filter(chr == "V",
+                  ci_l_pos < 11119730,
+                  ci_r_pos > 11118721) %>%
+    na.omit()
+
+tsize <- 10
+# plot all three drugs together
+scb1_mediation %>%
+    dplyr::mutate(abs_est = abs(estimate)) %>%
+    tidyr::separate(marker, c("chrom", "pos"), "_") %>%
+    tidyr::separate(trait, c("condition", "trait"), "_") %>%
+    dplyr::mutate(pos = as.numeric(pos)) %>%
+    dplyr::filter(var == "prop_med") %>%
+    dplyr::arrange(pos) %>%
+    dplyr::mutate(scb1 = ifelse(probe == "A_12_P104350", "yes", "no")) %>%
+    dplyr::group_by(condition, trait) %>%
+    dplyr::mutate(q90 = quantile(abs_est, probs = 0.9)[[1]],
+                  q95 = quantile(abs_est, probs = 0.95)[[1]],
+                  q99 = quantile(abs_est, probs = 0.99)[[1]]) %>%
+    ggplot(.) +
+    aes(x = pos/1e6, y = abs_est, fill = scb1, shape = scb1, size = scb1) +
+    geom_point(aes(alpha = prob), color = "black") +
+    scale_alpha_continuous(range = c(1, 0.1)) +
+    theme_bw(10) +
+    scale_fill_manual(values = c("yes" = "red", "no" = "black")) +
+    scale_shape_manual(values = c("yes" = 23, "no" = 21)) +
+    scale_size_manual(values = c("yes" = 3, "no" = 1)) +
+    labs(x = "Genomic position (Mb)", y = "Mediation estimate") +
+    theme(panel.grid = element_blank(),
+          legend.position = "none",
+          axis.text = element_text(face="bold", color="black"),
+          axis.title = element_text(face="bold", color="black"),
+          strip.text = element_text(face = "bold", color = "black")) +
+    geom_hline(aes(yintercept = q90), color = "grey") +
+    facet_grid(condition~trait, scales = "free") +
+    ylim(0,1) +
+    geom_vline(data = chrVtraits, aes(xintercept = ci_l_pos/1e6), color = "blue", linetype = "dashed") +
+    geom_vline(data = chrVtraits, aes(xintercept = ci_r_pos/1e6), color = "blue", linetype = "dashed")
+
+
+```
+
+**Figure S6** Mediation analysis for genes with eQTL in chromosome V hotspot for all drugtraits. Mediation estimates calculated as the fraction of the total QTL effect explained by differences in expression of each gene (y-axis) are plotted against the genomic position of the eQTL (x-axis) on chromosome V for 49 probes surrounding *scb-1* (red diamond) (set 1 RIAILs). The 90th percentile of the distribution of mediation estimates for each trait are represented by the horizontal grey lines. If relevant, the confidence intervals for the QTL (set 1 RIAILs) are shown with the vertical blue dotted lines. The confidence of the estimate increases (p-value decreases) as points become less transparent.
+
+
+```{r}
+cat("\n\n\n")
+cat("\n\n\\pagebreak\n")
+```
+
+
+```{r figure_s7,  fig.height = 6, fig.width = 7.5}
+###############################
+# Figure S7
+# scb-1 del results
+###############################
+
+# load data
+scb1_pruned <- read.csv("data/FileS13_scb1_pruned.csv")
+nil_genotypes <- read.csv("data/FileS5_nil_genotypes.csv")
+HTA_stats <- read.csv("data/FileS7_HTA_stats.csv")
+
+# plot all drugs for all traits
+tsize <- 10
+
+# regress scb-1
+scb1_regressed <- easysorter::regress(scb1_pruned)
+
+for(d in sort(unique(scb1_regressed$condition))) {
+    # stats
+    stats <- HTA_stats %>%
+        dplyr::filter(comparison %in% c("N2-ECA232", "N2-ECA1132", "N2-ECA1135", "ECA1114-CB4856", "ECA1133-CB4856", "ECA1134-CB4856"),
+                      experiment == "CRISPR",
+                      condition == d) %>%
+        dplyr::select(condition, trait, comparison, pval = adj.p.value) %>%
+        dplyr::group_by(trait) %>%
+        dplyr::mutate(strain = dplyr::case_when(comparison == "N2-ECA232" ~ "ECA232",
+                                                comparison == "N2-ECA1132" ~ "ECA1132",
+                                                comparison == "N2-ECA1135" ~ "ECA1135",
+                                                comparison == "ECA1114-CB4856" ~ "ECA1114",
+                                                comparison == "ECA1133-CB4856" ~ "ECA1133",
+                                                comparison == "ECA1134-CB4856" ~ "ECA1134",
+                                                TRUE ~ "NA"),
+                      sig = dplyr::case_when(pval < 0.0001 ~ "****",
+                                             pval < 0.001 ~ "***",
+                                             pval < 0.01 ~ "**",
+                                             pval < 0.05 ~ "*",
+                                             TRUE ~ "ns"))
+    
+    # plot
+    scb1plot <- scb1_regressed %>%
+        dplyr::filter(condition == d) %>%
+        dplyr::group_by(condition, trait) %>%
+        dplyr::mutate(relative_pheno = ((phenotype - min(phenotype, na.rm = T)) / (max(phenotype, na.rm = T) - min(phenotype, na.rm = T)))) %>%
+        dplyr::mutate(phenotype = relative_pheno) %>%
+        dplyr::mutate(strain_fill = dplyr::case_when(strain %in% c("N2", "ECA1132", "ECA1135") ~ "N2",
+                                                     strain %in% c("CB4856", "ECA1133", "ECA1134") ~ "CB",
+                                                     TRUE ~ "NIL"),
+                      groups = dplyr::case_when(strain %in% c("N2", "ECA1132", "ECA1135", "ECA232") ~ "N2",
+                                                strain %in% c("CB4856", "ECA1133", "ECA1134", "ECA1114") ~ "CB",
+                                                TRUE ~ "NIL")) %>%
+        dplyr::full_join(stats, by = c("strain", "condition", "trait")) %>%
+        dplyr::mutate(strain = factor(strain, 
+                                      levels = c("N2", "CB4856", "ECA232", "ECA1114", "ECA1132", "ECA1135", "ECA1133", "ECA1134"))) %>%
+                                      # levels = rev(c("N2", "ECA1132", "ECA1133", "CB4856")))) %>%
+        # labels = c("N2", "CB4856", "ECA232\nN2[V,CB>N2]", "ECA1114\nCB[V,N2>CB]", "ECA1132\nN2[scb-1∆]", "ECA1135\nN2[scb-1∆]", "ECA1133\nCB[scb-1∆]", "ECA1134\nCB[scb-1∆]"))) %>%
+        dplyr::group_by(strain, condition) %>%
+        dplyr::filter(!is.na(strain)) %>%
+        dplyr::mutate(phen = max(phenotype) + 0.2) %>%
+        ggplot(.) +
+        aes(x = strain, y = phenotype, fill = strain_fill) +
+        geom_jitter(width = 0.1, size = 0.05) +
+        geom_boxplot(outlier.color = NA, alpha = 0.5, size = 0.2) +
+        ggplot2::geom_text(aes(label = sig, y = phen, color = groups), size = tsize/4) +
+        scale_fill_manual(values = c("N2" = "orange", "CB" = "blue", "NIL" = "grey")) +
+        scale_x_discrete(labels = c("N2" = "N2", "CB4856" = "CB4856", "ECA232" = "ECA232\nN2[V,CB>N2]", "ECA1114" = "ECA1114\nCB[V,N2>CB]", 
+                                    "ECA1132" = expression("ECA1132\nN2[scb-1"*Delta*"]"), "ECA1135" = expression(paste("ECA1135\nN2[scb-1", Delta, "]")), 
+                                    "ECA1133" = expression(paste("ECA1133\nCB[scb-1", Delta, "]")), "ECA1134" = expression(paste("ECA1134\nCB[scb-1", Delta, "]")))) +
+        scale_color_manual(values = c("N2" = "orange", "CB" = "blue")) +
+        theme_bw(tsize) +
+        theme(axis.text.x = element_text(face="bold", color="black", angle = 45, hjust = 1),
+              axis.title.x = element_text(face="bold", color="black"),
+              axis.title.y = element_text(face="bold", color="black"),
+              axis.text.y = element_text(face="bold", color="black"),
+              axis.ticks.y = element_blank(),
+              strip.text = element_text(face = "bold", color = "black"),
+              legend.position = "none",
+              panel.grid.minor = element_blank(),
+              panel.grid.major = element_blank()) +
+        labs(x = " ", y = "Relative phenotype") +
+        facet_grid(trait~stringr::str_to_title(condition), scales = "free")
+    
+    print(scb1plot)
+    cat("\n\n\n")
+    cat("\n\n\\pagebreak\n")
+}
+
+
+
+```
+
+**Figure S7** Testing the role of *scb-1* in drug responses. Drug phenotypes are plotted as Tukey box plots with strain (x-axis) by relative phenotype (y-axis). Strains with an N2 background are colored orange and strains with a CB4856 background are colored blue. NILs are colored grey. Statistical significance of each strain compared to its parental strain (ECA232, ECA1132, and ECA1135 to N2 and ECA1114, ECA1133, and ECA1134 to CB4856) is shown above each strain and colored by the parent strain it was tested against (ns = non-significant (p-value > 0.05); `*`, `**`, `***`, and `****` = significant (p-value < 0.05, 0.01, 0.001, or 0.0001, respectively).
+
+```{r}
+cat("\n\n\n")
+cat("\n\n\\pagebreak\n")
+```
+
+
+```{r figure_s8,  fig.height = 6, fig.width = 7.5}
+###############################
+# Figure S8
+# scb-1 del results
+###############################
+
+# load data
+scb1_pruned <- read.csv("data/FileS13_scb1_pruned.csv")
+nil_genotypes <- read.csv("data/FileS5_nil_genotypes.csv")
+
+# plot all drugs for all traits
+tsize <- 10 
+
+# plot
+scb1_pruned %>%
+    dplyr::filter(condition %in% c("DMSO", "water", "kmedia")) %>%
+    dplyr::group_by(condition, trait) %>%
+    dplyr::mutate(relative_pheno = ((phenotype - min(phenotype, na.rm = T)) / (max(phenotype, na.rm = T) - min(phenotype, na.rm = T)))) %>%
+    dplyr::mutate(phenotype = relative_pheno) %>%
+    dplyr::mutate(strain_fill = dplyr::case_when(strain %in% c("N2", "ECA1132", "ECA1135") ~ "N2",
+                                                 strain %in% c("CB4856", "ECA1133", "ECA1134") ~ "CB",
+                                                 TRUE ~ "NIL"),
+                  groups = dplyr::case_when(strain %in% c("N2", "ECA1132", "ECA1135", "ECA232") ~ "N2",
+                                            strain %in% c("CB4856", "ECA1133", "ECA1134", "ECA1114") ~ "CB",
+                                            TRUE ~ "NIL")) %>%
+    # dplyr::full_join(stats, by = c("strain", "condition", "trait")) %>%
+    dplyr::mutate(strain = factor(strain, 
+                                  levels = c("N2", "CB4856", "ECA232", "ECA1114", "ECA1132", "ECA1135", "ECA1133", "ECA1134"))) %>%
+                                  # levels = rev(c("N2", "ECA1132", "ECA1133", "CB4856")))) %>%
+    # labels = c("N2", "CB4856", "ECA232\nN2[V,CB>N2]", "ECA1114\nCB[V,N2>CB]", "ECA1132\nN2[scb-1∆]", "ECA1135\nN2[scb-1∆]", "ECA1133\nCB[scb-1∆]", "ECA1134\nCB[scb-1∆]"))) %>%
+    dplyr::group_by(strain, condition, trait) %>%
+    dplyr::filter(!is.na(strain)) %>%
+    # dplyr::mutate(phen = max(phenotype) + 0.2) %>%
+    ggplot(.) +
+    aes(x = strain, y = phenotype, fill = strain_fill) +
+    geom_jitter(width = 0.1, size = 0.05) +
+    geom_boxplot(outlier.color = NA, alpha = 0.5, size = 0.2) +
+    # ggplot2::geom_text(aes(label = sig, y = phen, color = groups), size = tsize/4) +
+    scale_fill_manual(values = c("N2" = "orange", "CB" = "blue", "NIL" = "grey")) +
+    # scale_x_discrete(labels = c("N2" = "N2", "CB4856" = "CB4856", "ECA232" = "ECA232\nN2[V,CB>N2]", "ECA1114" = "ECA1114\nCB[V,N2>CB]", 
+    #                             "ECA1132" = expression("ECA1132\nN2[scb-1"*Delta*"]"), "ECA1135" = expression(paste("ECA1135\nN2[scb-1", Delta, "]")), 
+    #                             "ECA1133" = expression(paste("ECA1133\nCB[scb-1", Delta, "]")), "ECA1134" = expression(paste("ECA1134\nCB[scb-1", Delta, "]")))) +
+    scale_color_manual(values = c("N2" = "orange", "CB" = "blue")) +
+    theme_bw(tsize) +
+    theme(axis.text.x = element_text(face="bold", color="black", angle = 45, hjust = 1),
+          axis.title.x = element_text(face="bold", color="black"),
+          axis.title.y = element_text(face="bold", color="black"),
+          axis.text.y = element_text(face="bold", color="black"),
+          axis.ticks.y = element_blank(),
+          strip.text = element_text(face = "bold", color = "black"),
+          legend.position = "none",
+          panel.grid.minor = element_blank(),
+          panel.grid.major = element_blank()) +
+    labs(x = " ", y = "Relative residual animal length") +
+    facet_grid(trait~condition, scales = "free")
+
+```
+
+**Figure S8** Control conditions for *scb-1* deletion test. Control phenotypes are plotted as Tukey box plots with strain (x-axis) by relative phenotype (y-axis). Strains with an N2 background are colored orange and strains with a CB4856 background are colored blue. NILs are colored grey. 
