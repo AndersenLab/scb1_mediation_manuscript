@@ -471,7 +471,7 @@ scb1_mediation %>%
     dplyr::mutate(abs_est = abs(estimate)) %>%
     tidyr::separate(marker, c("chrom", "pos"), "_") %>%
     dplyr::mutate(pos = as.numeric(pos)) %>%
-    dplyr::filter(var == "med") %>%
+    dplyr::filter(var == "prop_med") %>%
     dplyr::arrange(pos) %>%
     dplyr::mutate(scb1 = ifelse(probe == "A_12_P104350", "yes", "no"),
                   condition = stringr::str_split_fixed(trait, "_", 2)[,1]) %>%
