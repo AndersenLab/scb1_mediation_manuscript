@@ -2,7 +2,7 @@
 Data, scripts, and figures for scb-1 mediation manuscript
 
 ### Manuscript
-Link to bioRxiv.
+Link: [here](https://www.g3journal.org/content/early/2020/05/08/g3.120.401310).
 
 ### Usage
 1. Download git repo
